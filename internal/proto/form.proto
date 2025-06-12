@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package form;
+
+option go_package = "github.com/za416854/go-form-collector/internal/proto/formpb";
+
+service FormCollector {
+  rpc Submit(FormData) returns (SubmitReply);
+}
+
+message FormData {
+  string name = 1;
+  string email = 2;
+  string answer = 3;
+}
+
+message SubmitReply {
+  string message = 1;
+}
+// FormData 用於收集表單數據
