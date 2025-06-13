@@ -6,13 +6,14 @@ import (
 	"log"
 	"net"
 	"net/http"
+
 	"github.com/go-chi/chi/v5"
-	"google.golang.org/grpc"
-    "google.golang.org/grpc/reflection"
-	"github.com/za416854/go-form-collector/internal/queue"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	pb "github.com/za416854/go-form-collector/internal/proto/formpb"
+	"github.com/za416854/go-form-collector/internal/queue"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
 
 // 當一個「gRPC伺服器」
@@ -20,6 +21,7 @@ import (
 type formCollectorServer struct {
 	pb.UnimplementedFormCollectorServer
 }
+
 // 當一個「REST伺服器」
 var (
 	apiQPS = prometheus.NewCounter(prometheus.CounterOpts{
@@ -27,6 +29,15 @@ var (
 		Help: "Total number of API requests",
 	})
 )
+
+// 當一個「Redis佇列長度」的指標
+var (
+	queueLength = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "redis_queue_length",
+		Help: "Current length of the Redis queue",
+	})
+)
+
 // 如果別人用 gRPC 把資料傳進來，我就回一句 “我收到了”
 func (s *formCollectorServer) Submit(ctx context.Context, data *pb.FormData) (*pb.SubmitReply, error) {
 	apiQPS.Inc() // 增加 API QPS 計數器
@@ -41,24 +52,33 @@ func (s *formCollectorServer) Submit(ctx context.Context, data *pb.FormData) (*p
 
 // 如果有網站打 POST /submit，我就回一句 “我收到了”
 func handleSubmit(w http.ResponseWriter, r *http.Request) {
-	apiQPS.Inc() // 增加 API QPS 計數器
+	apiQPS.Inc() // ✅ QPS 加一
+
 	var data map[string]interface{}
 	json.NewDecoder(r.Body).Decode(&data)
+
 	err := queue.EnqueueForm(data)
 	if err != nil {
 		log.Println("佇列失敗:", err)
 		http.Error(w, "queue failed", 500)
 		return
 	}
+
+	// ✅ 加在這裡
+	len, _ := queue.RedisClient.LLen(context.Background(), queue.QueueKey).Result()
+	queueLength.Set(float64(len))
+
 	log.Println("REST received:", data)
 	w.WriteHeader(http.StatusAccepted)
 	w.Write([]byte("queued"))
 }
 
+
 func main() {
-	prometheus.MustRegister(apiQPS) // 註冊 API QPS 的計數器
-	queue.InitRedis() // 初始化 Redis 連線
-	// 「啟動 gRPC 伺服器」的那一段 
+	prometheus.MustRegister(apiQPS)      // 註冊 API QPS 的計數器
+	prometheus.MustRegister(queueLength) // 註冊 Redis 佇列長度的指標
+	queue.InitRedis()                    // 初始化 Redis 連線
+	// 「啟動 gRPC 伺服器」的那一段
 	go func() {
 		lis, err := net.Listen("tcp", ":50051")
 		if err != nil {
