@@ -3,14 +3,22 @@
     {
       "name": "api",
       "source": ".",
-      "buildCommand": "docker build -f Dockerfile.api -t api .",
-      "startCommand": "docker run -p 8080:8080 api"
+      "dockerfilePath": "Dockerfile.api",
+      "startCommand": null,
+      "envVars": {
+        "REDIS_URL": "${{REDIS_URL}}",
+        "MONGODB_URI": "${{MONGODB_URI}}"
+      }
     },
     {
       "name": "worker",
       "source": ".",
-      "buildCommand": "docker build -f Dockerfile.worker -t worker .",
-      "startCommand": "docker run -p 9091:9091 worker"
+      "dockerfilePath": "Dockerfile.worker",
+      "startCommand": null,
+      "envVars": {
+        "REDIS_URL": "${{REDIS_URL}}",
+        "MONGODB_URI": "${{MONGODB_URI}}"
+      }
     }
   ]
 }
