@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -12,16 +13,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-)
-
-// Redis + MongoDB 連線設定
-const (
-	redisAddr     = "localhost:6379"
-	redisQueueKey = "form:queue"
-
-	mongoURI  = "mongodb+srv://z416854:Chris710!@clusterkris.pzdoz64.mongodb.net/"
-	mongoDB   = "form_collector"
-	mongoColl = "submissions"
 )
 
 // Prometheus 指標
@@ -50,31 +41,49 @@ func initMetricsServer() {
 func main() {
 	ctx := context.Background()
 
-	// 啟動 Prometheus metrics
+	// 啟動 Prometheus
 	initMetricsServer()
 
-	// 連線 Redis
-	rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
+	// 讀取環境變數
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL == "" {
+		log.Fatal("❌ REDIS_URL 環境變數未設定")
+	}
+
+	mongoURI := "mongodb+srv://z416854:Chris710!@clusterkris.pzdoz64.mongodb.net/"
+	if mongoURI == "" {
+		log.Fatal("❌ MONGODB_URI 環境變數未設定")
+	}
+
+	queueKey := "form:queue"
+
+	// 初始化 Redis
+	opt, err := redis.ParseURL(redisURL)
+	if err != nil {
+		log.Fatalf("❌ Redis URL 解析錯誤: %v", err)
+	}
+	rdb := redis.NewClient(opt)
 	if err := rdb.Ping(ctx).Err(); err != nil {
-		log.Fatalf("Redis 連線失敗: %v", err)
+		log.Fatalf("❌ Redis 連線失敗: %v", err)
 	}
 	log.Println("✅ Redis 連線成功")
 
-	// 連線 MongoDB Atlas
+	// 初始化 MongoDB
 	mongoClient, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoURI))
 	if err != nil {
-		log.Fatalf("MongoDB 連線失敗: %v", err)
+		log.Fatalf("❌ MongoDB 連線失敗: %v", err)
 	}
 	defer mongoClient.Disconnect(ctx)
-	log.Println("✅ MongoDB Atlas 連線成功")
+	log.Println("✅ MongoDB 連線成功")
 
-	collection := mongoClient.Database(mongoDB).Collection(mongoColl)
+	db := mongoClient.Database("form_collector")
+	coll := db.Collection("submissions")
 
-	// 無限迴圈：從 Redis 拿資料 ➜ 寫入 Mongo
+	// 循環處理佇列
 	for {
-		result, err := rdb.BRPop(ctx, 0*time.Second, redisQueueKey).Result()
+		result, err := rdb.BRPop(ctx, 0*time.Second, queueKey).Result()
 		if err != nil {
-			log.Printf("從 Redis 取資料失敗: %v", err)
+			log.Printf("❌ 從 Redis 取資料失敗: %v", err)
 			continue
 		}
 		if len(result) < 2 {
@@ -83,14 +92,13 @@ func main() {
 
 		var data map[string]interface{}
 		if err := json.Unmarshal([]byte(result[1]), &data); err != nil {
-			log.Printf("JSON 解析失敗: %v", err)
+			log.Printf("❌ JSON 解析失敗: %v", err)
 			insertFailures.Inc()
 			continue
 		}
 
-		_, err = collection.InsertOne(ctx, data)
-		if err != nil {
-			log.Printf("MongoDB 寫入失敗: %v", err)
+		if _, err = coll.InsertOne(ctx, data); err != nil {
+			log.Printf("❌ MongoDB 寫入失敗: %v", err)
 			insertFailures.Inc()
 			continue
 		}
