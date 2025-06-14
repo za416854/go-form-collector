@@ -3,17 +3,14 @@
     {
       "name": "api",
       "source": ".",
-      "dockerfilePath": "Dockerfile.api",
-      "startCommand": "./api",
-      "healthcheckPath": "/metrics",
-      "port": 8080
+      "buildCommand": "docker build -f Dockerfile.api -t api .",
+      "startCommand": "docker run -p 8080:8080 api"
     },
     {
       "name": "worker",
       "source": ".",
-      "dockerfilePath": "Dockerfile.worker",
-      "startCommand": "./worker",
-      "port": 9091
+      "buildCommand": "docker build -f Dockerfile.worker -t worker .",
+      "startCommand": "docker run -p 9091:9091 worker"
     }
   ]
 }
