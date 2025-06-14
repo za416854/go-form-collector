@@ -7,4 +7,4 @@ scrape_configs:
       - targets: ["172.17.0.1:8080"]
   - job_name: "go-worker"
     static_configs:
-      - targets: ["10.0.1.206:9091"]
+      - targets: ["10.0.1.47:9091"]

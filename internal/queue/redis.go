@@ -2,8 +2,10 @@ package queue
 
 import (
 	"context"
+	"encoding/json"
 	"log"
-	"os"
+
+	// "time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -15,22 +17,22 @@ var (
 )
 
 func InitRedis() {
-	redisURL := os.Getenv("REDIS_URL")
-	if redisURL == "" {
-		log.Fatalf("❌ REDIS_URL 環境變數未設定")
-	}
-
-	opt, err := redis.ParseURL(redisURL)
+	RedisClient = redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379", // Codespace Redis 預設 port
+		Password: "",               // 沒密碼
+		DB:       0,
+	})
+	_, err := RedisClient.Ping(ctx).Result()
 	if err != nil {
-		log.Fatalf("❌ Redis 連線字串解析失敗: %v", err)
+		log.Fatalf("Redis 連線失敗: %v", err)
 	}
-
-	RedisClient = redis.NewClient(opt)
-
-	_, err = RedisClient.Ping(ctx).Result()
-	if err != nil {
-		log.Fatalf("❌ Redis 連線失敗: %v", err)
-	}
-
 	log.Println("✅ Redis 連線成功")
+}
+
+func EnqueueForm(data any) error {
+	bytes, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	return RedisClient.LPush(ctx, QueueKey, bytes).Err()
 }
