@@ -1,0 +1,19 @@
+{
+  "services": [
+    {
+      "name": "api",
+      "source": ".",
+      "dockerfilePath": "Dockerfile.api",
+      "startCommand": "./api",
+      "healthcheckPath": "/metrics",
+      "port": 8080
+    },
+    {
+      "name": "worker",
+      "source": ".",
+      "dockerfilePath": "Dockerfile.worker",
+      "startCommand": "./worker",
+      "port": 9091
+    }
+  ]
+}
